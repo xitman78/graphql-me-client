@@ -13,8 +13,8 @@ const UserItem = ({id, name, email}) => (
 
 class UsersList extends React.Component {
 
-  componentWillReceiveProps(nextProps) {
-    console.log("Users props", nextProps);
+  constructor() {
+    super();
 
     this.onUserCreated = this.onUserCreated.bind(this);
   }
