@@ -2,6 +2,7 @@ import React from 'react';
 import {PropTypes} from 'prop-types';
 import { graphql } from 'react-apollo';
 import gql from 'graphql-tag';
+import update from 'immutability-helper';
 
 import CreateUser from './CreateUser';
 
@@ -19,8 +20,13 @@ class UsersList extends React.Component {
     this.onUserCreated = this.onUserCreated.bind(this);
   }
 
+  componentWillMount() {
+    this.props.subscribeToNewUsers();
+  }
+
+
   onUserCreated(user) {
-    this.props.usersQuery.refetch();
+    // this.props.usersQuery.refetch();
   }
 
   render() {
@@ -62,13 +68,54 @@ const FEED_QUERY = gql`
     }
   }
 `
+const USERS_SUBSCRIPTION = gql`
+subscription {
+  userAdded {
+    id
+    name
+    email
+  }
+}
+`;
 
-export default graphql(FEED_QUERY, {
+const withData = graphql(FEED_QUERY, {
   name: 'usersQuery', // name of the injected prop: this.props.feedQuery...
   options: {
     fetchPolicy: 'network-only',
   },
-})(UsersList)
+  props: props => {
+    console.log(props);
+    return {
+        ...props,
+        subscribeToNewUsers: params => {
+          console.log('Subscribe to new users');
+          return props.usersQuery.subscribeToMore({
+              document: USERS_SUBSCRIPTION,
+              // variables: {
+              //     repoName: params.repoFullName,
+              // },
+              updateQuery: (prev, {subscriptionData}) => {
+                if (!subscriptionData.data) {
+                    return prev;
+                }
 
+                console.log('subscriptionData', subscriptionData);
+                console.log('prev', prev);
 
-// export default UsersList;
+                const newUser = subscriptionData.data.userAdded;
+
+                return update(prev, {
+                  user: {
+                    list: {
+                      $unshift: [newUser],
+                    },
+                  },
+                });
+              },
+            });
+          },
+        };
+      },
+    });
+
+export default withData(UsersList);
