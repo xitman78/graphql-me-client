@@ -1,3 +1,5 @@
+// @flow
+
 import React from 'react';
 import {PropTypes} from 'prop-types';
 import { graphql } from 'react-apollo';
@@ -6,28 +8,57 @@ import update from 'immutability-helper';
 
 import CreateUser from './CreateUser';
 
-const UserItem = ({id, name, email}) => (
+import type { OperationComponent, QueryProps, ChildProps } from "react-apollo";
+import type { ListUsersQuery } from "./grapgql-types.flow";
+
+const UserItem = ({name, email}: {name: ?string, email: ?string}) => (
   <div>
     <span>{name}</span>&nbsp;<span>{email}</span>
   </div>
 );
 
-class UsersList extends React.Component {
 
-  constructor() {
-    super();
+type MergedPropType = ListUsersQuery & QueryProps;
 
-    this.onUserCreated = this.onUserCreated.bind(this);
-  }
+type Props = {
+  usersQuery: MergedPropType,
+};
+
+class UsersList extends React.Component<Props> {
+
+  subscribeToNewUsers: () => void;
+
 
   componentWillMount() {
-    this.props.subscribeToNewUsers();
+     this.subscribeToNewUsers.call(this);
+  }
+
+  subscribeToNewUsers() {
+    this.props.usersQuery.subscribeToMore({
+      document: USERS_SUBSCRIPTION,
+      // variables: {
+      //     repoName: params.repoFullName,
+      // },
+      updateQuery: (prev, {subscriptionData}) => {
+        if (!subscriptionData.data) {
+            return prev;
+        }
+        const newUser = subscriptionData.data.userAdded;
+        return update(prev, {
+          user: {
+            list: {
+              $unshift: [newUser],
+            },
+          },
+        });
+      },
+    });
   }
 
 
-  onUserCreated(user) {
-    // this.props.usersQuery.refetch();
-  }
+  // onUserCreated(user) {
+  //   // this.props.usersQuery.refetch();
+  // }
 
   render() {
 
@@ -37,6 +68,8 @@ class UsersList extends React.Component {
       )
     }
 
+    if (!this.props.usersQuery.user || !this.props.usersQuery.user.list) return null;
+
     let list = this.props.usersQuery.user.list;
 
     return (
@@ -44,18 +77,14 @@ class UsersList extends React.Component {
         Hello Users!
         <hr/>
         {
-          list.map(user => <UserItem key={user.id} {...user} />)
+          list.map(user => (user ? <UserItem key={user.id} {...user} /> : null))
         }
         <hr />
-        <CreateUser onUserCreated={this.onUserCreated} />
+        <CreateUser />
       </div>
     );
   }
 }
-
-UsersList.propTypes = {
-  usersQuery: PropTypes.object.isRequired,
-};
 
 const FEED_QUERY = gql`
   query ListUsers {
@@ -64,12 +93,13 @@ const FEED_QUERY = gql`
         id
         name
         email
+        __typename
       }
     }
   }
 `
 const USERS_SUBSCRIPTION = gql`
-subscription {
+subscription UsersSubscription {
   userAdded {
     id
     name
@@ -78,44 +108,12 @@ subscription {
 }
 `;
 
-const withData = graphql(FEED_QUERY, {
+
+
+const withData: OperationComponent<ListUsersQuery, Props> = graphql(FEED_QUERY, {
   name: 'usersQuery', // name of the injected prop: this.props.feedQuery...
-  options: {
-    fetchPolicy: 'network-only',
-  },
-  props: props => {
-    console.log(props);
-    return {
-        ...props,
-        subscribeToNewUsers: params => {
-          console.log('Subscribe to new users');
-          return props.usersQuery.subscribeToMore({
-              document: USERS_SUBSCRIPTION,
-              // variables: {
-              //     repoName: params.repoFullName,
-              // },
-              updateQuery: (prev, {subscriptionData}) => {
-                if (!subscriptionData.data) {
-                    return prev;
-                }
-
-                console.log('subscriptionData', subscriptionData);
-                console.log('prev', prev);
-
-                const newUser = subscriptionData.data.userAdded;
-
-                return update(prev, {
-                  user: {
-                    list: {
-                      $unshift: [newUser],
-                    },
-                  },
-                });
-              },
-            });
-          },
-        };
-      },
-    });
+});
 
 export default withData(UsersList);
+
+export {FEED_QUERY as usersQuery};

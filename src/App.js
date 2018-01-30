@@ -35,7 +35,10 @@ const link = split(
 const client = new ApolloClient({
   link: link,
   cache: new InMemoryCache(),
+  connectToDevTools: true,
 });
+
+window.__APOLLO_CLIENT__ = client;
 
 class App extends Component {
   render() {
